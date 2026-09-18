@@ -36,7 +36,7 @@ Environment variables (`.env.local` / Vercel project settings):
 2. Configure the OAuth consent screen (External, add your own Google account as a test user).
 3. Create an **OAuth client ID** of type Web application with these authorized redirect URIs:
    - `http://localhost:3000/api/google/callback`
-   - `https://<your-production-domain>/api/google/callback`
+   - `https://personal-task-tracker-ten.vercel.app/api/google/callback`
 4. Put the client ID and secret in `.env.local` and in Vercel (`vercel env add GOOGLE_CLIENT_ID production` etc.).
 5. Open **Settings** in the app and click **Connect Google Calendar**.
 
