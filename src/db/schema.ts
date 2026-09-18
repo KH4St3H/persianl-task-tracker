@@ -48,6 +48,8 @@ export const tasks = pgTable(
     repeatInterval: integer("repeat_interval").notNull().default(1),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Google Calendar event backing this task (null when not synced)
+    googleEventId: text("google_event_id"),
   },
   (t) => [index("tasks_status_idx").on(t.status), index("tasks_due_idx").on(t.dueDate)],
 );
@@ -108,3 +110,14 @@ export type TaskWithRelations = Task & {
   subtasks: Subtask[];
   taskTags: { tagId: number; tag: Tag }[];
 };
+
+/** Single-row table holding the connected Google account (this is a single-user app). */
+export const googleAccount = pgTable("google_account", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  calendarId: text("calendar_id"),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type GoogleAccount = typeof googleAccount.$inferSelect;

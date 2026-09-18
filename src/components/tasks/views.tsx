@@ -20,6 +20,9 @@ import { reorderTasks, setQuadrant } from "@/actions/tasks";
 import { isDueToday, isOverdue } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { TaskWithRelations } from "@/db/schema";
+import type { CalendarEvent } from "@/lib/google";
+import { format, parseISO } from "date-fns";
+import { CalendarDays } from "lucide-react";
 import { TaskItem } from "./task-item";
 
 type ViewProps = { tasks: TaskWithRelations[]; onOpen: (t: TaskWithRelations) => void };
@@ -51,7 +54,32 @@ const byDue = (a: TaskWithRelations, b: TaskWithRelations) =>
   (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || a.level - b.level;
 
 // ---------- Today ----------
-export function TodayView({ tasks, onOpen }: ViewProps) {
+function CalendarSection({ events }: { events: CalendarEvent[] }) {
+  return (
+    <section className="space-y-1.5">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On your calendar · {events.length}</h2>
+      {!events.length && <p className="text-sm text-muted-foreground">No events today.</p>}
+      {events.map((e) => (
+        <a
+          key={e.id}
+          href={e.link}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm hover:bg-muted/60"
+        >
+          <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+          <span className="w-24 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+            {e.allDay ? "All day" : `${format(parseISO(e.start), "HH:mm")}–${format(parseISO(e.end), "HH:mm")}`}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{e.title}</span>
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{e.calendar}</span>
+        </a>
+      ))}
+    </section>
+  );
+}
+
+export function TodayView({ tasks, onOpen, events = null }: ViewProps & { events?: CalendarEvent[] | null }) {
   const open = tasks.filter((t) => t.status === "open");
   const overdue = open.filter((t) => isOverdue(t.dueDate)).sort(byDue);
   const today = open.filter((t) => isDueToday(t.dueDate)).sort((a, b) => a.level - b.level);
@@ -60,6 +88,7 @@ export function TodayView({ tasks, onOpen }: ViewProps) {
   const empty = !overdue.length && !today.length && !urgent.length;
   return (
     <div className="space-y-5">
+      {events && <CalendarSection events={events} />}
       {empty && <Empty text="Nothing due today. Add a due date or mark something urgent to see it here." />}
       {overdue.length > 0 && <Section title="Overdue" tasks={overdue} onOpen={onOpen} tone="danger" />}
       {today.length > 0 && <Section title="Due today" tasks={today} onOpen={onOpen} />}

@@ -14,6 +14,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/projects" className="text-muted-foreground hover:text-foreground">
               Projects & tags
             </Link>
+            <Link href="/settings" className="text-muted-foreground hover:text-foreground">
+              Settings
+            </Link>
           </nav>
           <form action={logout}>
             <Button variant="ghost" size="sm" type="submit">

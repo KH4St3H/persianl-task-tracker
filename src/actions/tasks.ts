@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { REPEAT_RULES, subtasks, tasks, taskTags, type RepeatRule } from "@/db/schema";
 import { nextDueDate } from "@/lib/recurrence";
+import { removeTaskEvent, syncTaskToCalendar } from "@/lib/calendar-sync";
 
 const revalidate = () => {
   revalidatePath("/tasks");
@@ -64,6 +65,7 @@ export async function createTask(input: TaskInput) {
     .values({ ...data, manualRank: Number(min) - 1 })
     .returning({ id: tasks.id });
   await setTags(row.id, input.tagIds);
+  await syncTaskToCalendar(row.id);
   revalidate();
   return row.id;
 }
@@ -73,11 +75,13 @@ export async function updateTask(id: number, input: TaskInput) {
   if (!data.title) return;
   await db.update(tasks).set(data).where(eq(tasks.id, id));
   await setTags(id, input.tagIds);
+  await syncTaskToCalendar(id);
   revalidate();
 }
 
 export async function deleteTask(id: number) {
-  await db.delete(tasks).where(eq(tasks.id, id));
+  const [row] = await db.delete(tasks).where(eq(tasks.id, id)).returning({ eventId: tasks.googleEventId });
+  await removeTaskEvent(row?.eventId ?? null);
   revalidate();
 }
 
@@ -115,7 +119,9 @@ export async function setTaskDone(id: number, done: boolean) {
     if (task.taskTags.length) await db.insert(taskTags).values(task.taskTags.map((t) => ({ taskId: next.id, tagId: t.tagId })));
     // The completed instance no longer repeats, so it won't spawn twice if re-toggled.
     await db.update(tasks).set({ repeatRule: "none" }).where(eq(tasks.id, id));
+    await syncTaskToCalendar(next.id);
   }
+  await syncTaskToCalendar(id);
   revalidate();
 }
 
@@ -159,6 +165,7 @@ export async function deleteSubtask(id: number) {
 }
 
 export async function clearCompleted() {
-  await db.delete(tasks).where(and(eq(tasks.status, "done"), inArray(tasks.repeatRule, ["none"])));
+  const rows = await db.delete(tasks).where(and(eq(tasks.status, "done"), inArray(tasks.repeatRule, ["none"]))).returning({ eventId: tasks.googleEventId });
+  for (const r of rows) await removeTaskEvent(r.eventId);
   revalidate();
 }

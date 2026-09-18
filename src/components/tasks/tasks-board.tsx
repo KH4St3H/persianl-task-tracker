@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Project, Tag, TaskWithRelations } from "@/db/schema";
+import type { CalendarEvent } from "@/lib/google";
 import { cn } from "@/lib/utils";
 import { QuickAdd } from "./quick-add";
 import { TaskEditor } from "./task-editor";
@@ -28,6 +29,7 @@ export function TasksBoard({
   view,
   projectId,
   tagId,
+  events,
 }: {
   tasks: TaskWithRelations[];
   projects: Project[];
@@ -35,6 +37,7 @@ export function TasksBoard({
   view: ViewKey;
   projectId: number | null;
   tagId: number | null;
+  events: CalendarEvent[] | null;
 }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -95,7 +98,11 @@ export function TasksBoard({
         </div>
       </div>
 
-      <View tasks={filtered} onOpen={(t) => setEditingId(t.id)} />
+      {view === "today" ? (
+        <TodayView tasks={filtered} onOpen={(t) => setEditingId(t.id)} events={events} />
+      ) : (
+        <View tasks={filtered} onOpen={(t) => setEditingId(t.id)} />
+      )}
 
       <TaskEditor task={editing} projects={projects} tags={tags} onClose={() => setEditingId(null)} />
     </div>
