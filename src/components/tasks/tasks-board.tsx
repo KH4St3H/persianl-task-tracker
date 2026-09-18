@@ -168,10 +168,10 @@ export function TasksBoard({
               href={href(t.key)}
               aria-current={view === t.key ? "page" : undefined}
               className={cn(
-                "marker-stroke",
+                "border-b-[3px] pb-0.5",
                 view === t.key
-                  ? "marker-stroke-on text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "border-marker text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               {t.label}
