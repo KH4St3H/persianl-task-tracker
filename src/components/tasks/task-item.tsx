@@ -49,25 +49,42 @@ export function TaskItem({
       <Checkbox
         className="mt-0.5"
         checked={done}
-        onCheckedChange={(checked) => start(() => setTaskDone(task.id, !!checked))}
+        onCheckedChange={(checked) =>
+          start(() => setTaskDone(task.id, !!checked))
+        }
         aria-label={done ? "Mark as not done" : "Mark as done"}
       />
-      <button type="button" onClick={() => onOpen(task)} className="min-w-0 flex-1 text-left">
-        <div className={cn("truncate text-sm font-medium", done && "line-through")}>{task.title}</div>
+      <button
+        type="button"
+        onClick={() => onOpen(task)}
+        className="min-w-0 flex-1 text-left"
+      >
+        <div
+          className={cn("truncate text-sm font-medium", done && "line-through")}
+        >
+          {task.title}
+        </div>
         {!compact && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Badge variant="outline" className={levelClass(task.level)}>
               {levelLabel(task.level)}
             </Badge>
             {task.dueDate && (
-              <span className={cn(overdue && "font-medium text-red-600 dark:text-red-400")}>
+              <span
+                className={cn(
+                  overdue && "font-medium text-red-600 dark:text-red-400",
+                )}
+              >
                 {overdue ? "Overdue · " : ""}
                 {formatDue(task.dueDate)}
               </span>
             )}
             {task.project && (
               <span className="inline-flex items-center gap-1">
-                <span className="size-2 rounded-full" style={{ background: task.project.color }} />
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: task.project.color }}
+                />
                 {task.project.name}
               </span>
             )}

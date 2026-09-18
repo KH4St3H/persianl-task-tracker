@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { REPEAT_RULES, subtasks, tasks, taskTags, type RepeatRule } from "@/db/schema";
+import {
+  REPEAT_RULES,
+  subtasks,
+  tasks,
+  taskTags,
+  type RepeatRule,
+} from "@/db/schema";
 import { nextDueDate } from "@/lib/recurrence";
 import { removeTaskEvent, syncTaskToCalendar } from "@/lib/calendar-sync";
 
@@ -12,7 +18,8 @@ const revalidate = () => {
   revalidatePath("/projects");
 };
 
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(n)));
+const clamp = (n: number, lo: number, hi: number) =>
+  Math.min(hi, Math.max(lo, Math.round(n)));
 
 export type TaskInput = {
   title: string;
@@ -27,6 +34,8 @@ export type TaskInput = {
   repeatRule?: RepeatRule;
   repeatInterval?: number;
   tagIds?: number[];
+  /** Only used by createTask: initial subtasks, in order. */
+  subtasks?: string[];
 };
 
 function normalize(input: TaskInput) {
@@ -40,7 +49,9 @@ function normalize(input: TaskInput) {
     level: clamp(input.level ?? 2, 1, 3),
     impact: clamp(input.impact ?? 3, 1, 5),
     effort: clamp(input.effort ?? 3, 1, 5),
-    repeatRule: REPEAT_RULES.includes(input.repeatRule ?? "none") ? (input.repeatRule ?? "none") : "none",
+    repeatRule: REPEAT_RULES.includes(input.repeatRule ?? "none")
+      ? (input.repeatRule ?? "none")
+      : "none",
     repeatInterval: clamp(input.repeatInterval ?? 1, 1, 365),
   };
 }
@@ -48,7 +59,10 @@ function normalize(input: TaskInput) {
 async function setTags(taskId: number, tagIds: number[] | undefined) {
   if (tagIds === undefined) return;
   await db.delete(taskTags).where(eq(taskTags.taskId, taskId));
-  if (tagIds.length) await db.insert(taskTags).values(tagIds.map((tagId) => ({ taskId, tagId })));
+  if (tagIds.length)
+    await db
+      .insert(taskTags)
+      .values(tagIds.map((tagId) => ({ taskId, tagId })));
 }
 
 export async function quickAddTask(title: string) {
@@ -59,12 +73,21 @@ export async function quickAddTask(title: string) {
 export async function createTask(input: TaskInput) {
   const data = normalize(input);
   if (!data.title) return;
-  const [{ min }] = await db.select({ min: sql<number>`coalesce(min(${tasks.manualRank}), 0)` }).from(tasks);
+  const [{ min }] = await db
+    .select({ min: sql<number>`coalesce(min(${tasks.manualRank}), 0)` })
+    .from(tasks);
   const [row] = await db
     .insert(tasks)
     .values({ ...data, manualRank: Number(min) - 1 })
     .returning({ id: tasks.id });
   await setTags(row.id, input.tagIds);
+  const subs = (input.subtasks ?? []).map((t) => t.trim()).filter(Boolean);
+  if (subs.length)
+    await db
+      .insert(subtasks)
+      .values(
+        subs.map((title, position) => ({ taskId: row.id, title, position })),
+      );
   await syncTaskToCalendar(row.id);
   revalidate();
   return row.id;
@@ -80,18 +103,27 @@ export async function updateTask(id: number, input: TaskInput) {
 }
 
 export async function deleteTask(id: number) {
-  const [row] = await db.delete(tasks).where(eq(tasks.id, id)).returning({ eventId: tasks.googleEventId });
+  const [row] = await db
+    .delete(tasks)
+    .where(eq(tasks.id, id))
+    .returning({ eventId: tasks.googleEventId });
   await removeTaskEvent(row?.eventId ?? null);
   revalidate();
 }
 
 export async function setTaskDone(id: number, done: boolean) {
-  const task = await db.query.tasks.findFirst({ where: eq(tasks.id, id), with: { subtasks: true, taskTags: true } });
+  const task = await db.query.tasks.findFirst({
+    where: eq(tasks.id, id),
+    with: { subtasks: true, taskTags: true },
+  });
   if (!task) return;
 
   await db
     .update(tasks)
-    .set({ status: done ? "done" : "open", completedAt: done ? new Date() : null })
+    .set({
+      status: done ? "done" : "open",
+      completedAt: done ? new Date() : null,
+    })
     .where(eq(tasks.id, id));
 
   // Spawn next occurrence for recurring tasks.
@@ -115,8 +147,21 @@ export async function setTaskDone(id: number, done: boolean) {
       })
       .returning({ id: tasks.id });
     if (task.subtasks.length)
-      await db.insert(subtasks).values(task.subtasks.map((s) => ({ taskId: next.id, title: s.title, position: s.position })));
-    if (task.taskTags.length) await db.insert(taskTags).values(task.taskTags.map((t) => ({ taskId: next.id, tagId: t.tagId })));
+      await db
+        .insert(subtasks)
+        .values(
+          task.subtasks.map((s) => ({
+            taskId: next.id,
+            title: s.title,
+            position: s.position,
+          })),
+        );
+    if (task.taskTags.length)
+      await db
+        .insert(taskTags)
+        .values(
+          task.taskTags.map((t) => ({ taskId: next.id, tagId: t.tagId })),
+        );
     // The completed instance no longer repeats, so it won't spawn twice if re-toggled.
     await db.update(tasks).set({ repeatRule: "none" }).where(eq(tasks.id, id));
     await syncTaskToCalendar(next.id);
@@ -125,20 +170,31 @@ export async function setTaskDone(id: number, done: boolean) {
   revalidate();
 }
 
-export async function setQuadrant(id: number, urgent: boolean, important: boolean) {
+export async function setQuadrant(
+  id: number,
+  urgent: boolean,
+  important: boolean,
+) {
   await db.update(tasks).set({ urgent, important }).where(eq(tasks.id, id));
   revalidate();
 }
 
 export async function setLevel(id: number, level: number) {
-  await db.update(tasks).set({ level: clamp(level, 1, 3) }).where(eq(tasks.id, id));
+  await db
+    .update(tasks)
+    .set({ level: clamp(level, 1, 3) })
+    .where(eq(tasks.id, id));
   revalidate();
 }
 
 /** Persist a full manual ordering for the given ids (top to bottom). */
 export async function reorderTasks(orderedIds: number[]) {
   if (!orderedIds.length) return;
-  await Promise.all(orderedIds.map((id, i) => db.update(tasks).set({ manualRank: i }).where(eq(tasks.id, id))));
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      db.update(tasks).set({ manualRank: i }).where(eq(tasks.id, id)),
+    ),
+  );
   revalidate();
 }
 
@@ -150,7 +206,9 @@ export async function addSubtask(taskId: number, title: string) {
     .select({ max: sql<number>`coalesce(max(${subtasks.position}), -1)` })
     .from(subtasks)
     .where(eq(subtasks.taskId, taskId));
-  await db.insert(subtasks).values({ taskId, title: title.trim(), position: Number(max) + 1 });
+  await db
+    .insert(subtasks)
+    .values({ taskId, title: title.trim(), position: Number(max) + 1 });
   revalidate();
 }
 
@@ -165,7 +223,10 @@ export async function deleteSubtask(id: number) {
 }
 
 export async function clearCompleted() {
-  const rows = await db.delete(tasks).where(and(eq(tasks.status, "done"), inArray(tasks.repeatRule, ["none"]))).returning({ eventId: tasks.googleEventId });
+  const rows = await db
+    .delete(tasks)
+    .where(and(eq(tasks.status, "done"), inArray(tasks.repeatRule, ["none"])))
+    .returning({ eventId: tasks.googleEventId });
   for (const r of rows) await removeTaskEvent(r.eventId);
   revalidate();
 }

@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
   addSubtask,
+  createTask,
   deleteSubtask,
   deleteTask,
   toggleSubtask,
@@ -36,25 +37,34 @@ const selectClass =
 
 type EditorProps = { projects: Project[]; tags: Tag[]; onClose: () => void };
 
+/**
+ * Side panel for editing an existing task (`task` set) or creating a new one with
+ * full details (`draft` set to the title typed so far, possibly "").
+ */
 export function TaskEditor({
   task,
+  draft,
   projects,
   tags,
   onClose,
-}: EditorProps & { task: TaskWithRelations | null }) {
+}: EditorProps & { task: TaskWithRelations | null; draft: string | null }) {
+  const open = !!task || draft !== null;
   return (
-    <Sheet open={!!task} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Edit task</SheetTitle>
+          <SheetTitle>{task ? "Edit task" : "New task"}</SheetTitle>
           <SheetDescription className="sr-only">
-            Edit task details and priority.
+            {task
+              ? "Edit task details and priority."
+              : "Fill in task details and priority before creating it."}
           </SheetDescription>
         </SheetHeader>
-        {task && (
+        {open && (
           <EditorForm
-            key={task.id}
+            key={task ? task.id : "new"}
             task={task}
+            initialTitle={draft ?? ""}
             projects={projects}
             tags={tags}
             onClose={onClose}
@@ -67,25 +77,44 @@ export function TaskEditor({
 
 function EditorForm({
   task,
+  initialTitle,
   projects,
   tags,
   onClose,
-}: EditorProps & { task: TaskWithRelations }) {
-  const [form, setForm] = useState<TaskInput>(() => ({
-    title: task.title,
-    notes: task.notes,
-    dueDate: task.dueDate,
-    projectId: task.projectId,
-    urgent: task.urgent,
-    important: task.important,
-    level: task.level,
-    impact: task.impact,
-    effort: task.effort,
-    repeatRule: task.repeatRule,
-    repeatInterval: task.repeatInterval,
-    tagIds: task.taskTags.map((t) => t.tagId),
-  }));
+}: EditorProps & { task: TaskWithRelations | null; initialTitle: string }) {
+  const isNew = !task;
+  const [form, setForm] = useState<TaskInput>(() =>
+    task
+      ? {
+          title: task.title,
+          notes: task.notes,
+          dueDate: task.dueDate,
+          projectId: task.projectId,
+          urgent: task.urgent,
+          important: task.important,
+          level: task.level,
+          impact: task.impact,
+          effort: task.effort,
+          repeatRule: task.repeatRule,
+          repeatInterval: task.repeatInterval,
+          tagIds: task.taskTags.map((t) => t.tagId),
+        }
+      : {
+          title: initialTitle,
+          notes: "",
+          dueDate: null,
+          projectId: null,
+          level: 2,
+          impact: 3,
+          effort: 3,
+          repeatRule: "none",
+          repeatInterval: 1,
+          tagIds: [],
+        },
+  );
   const [newSub, setNewSub] = useState("");
+  // Subtasks typed before the task exists (create mode only); saved together with the task.
+  const [draftSubs, setDraftSubs] = useState<string[]>([]);
   const [pending, start] = useTransition();
 
   const set = <K extends keyof TaskInput>(k: K, v: TaskInput[K]) =>
@@ -94,17 +123,28 @@ function EditorForm({
   function save() {
     if (!form.title.trim()) return;
     start(async () => {
-      await updateTask(task.id, form);
+      if (task) await updateTask(task.id, form);
+      else await createTask({ ...form, subtasks: draftSubs });
       onClose();
     });
   }
 
   function remove() {
+    if (!task) return;
     if (!confirm("Delete this task?")) return;
     start(async () => {
       await deleteTask(task.id);
       onClose();
     });
+  }
+
+  function submitSubtask(e: React.FormEvent) {
+    e.preventDefault();
+    const t = newSub.trim();
+    if (!t) return;
+    setNewSub("");
+    if (task) start(() => addSubtask(task.id, t));
+    else setDraftSubs((d) => [...d, t]);
   }
 
   return (
@@ -282,7 +322,21 @@ function EditorForm({
       <div className="space-y-2">
         <Label>Subtasks</Label>
         <ul className="space-y-1">
-          {task.subtasks.map((s) => (
+          {draftSubs.map((title, i) => (
+            <li key={`draft-${i}`} className="flex items-center gap-2 text-sm">
+              <Checkbox disabled />
+              <span className="flex-1">{title}</span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Remove subtask"
+                onClick={() => setDraftSubs((d) => d.filter((_, j) => j !== i))}
+              >
+                <X />
+              </Button>
+            </li>
+          ))}
+          {(task?.subtasks ?? []).map((s) => (
             <li key={s.id} className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={s.done}
@@ -304,16 +358,7 @@ function EditorForm({
             </li>
           ))}
         </ul>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const t = newSub.trim();
-            if (!t) return;
-            setNewSub("");
-            start(() => addSubtask(task.id, t));
-          }}
-        >
+        <form className="flex gap-2" onSubmit={submitSubtask}>
           <Input
             value={newSub}
             onChange={(e) => setNewSub(e.target.value)}
@@ -326,15 +371,19 @@ function EditorForm({
       </div>
 
       <div className="mt-2 flex items-center justify-between">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive"
-          onClick={remove}
-          disabled={pending}
-        >
-          <Trash2 /> Delete
-        </Button>
+        {isNew ? (
+          <span />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive"
+            onClick={remove}
+            disabled={pending}
+          >
+            <Trash2 /> Delete
+          </Button>
+        )}
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -349,7 +398,7 @@ function EditorForm({
             onClick={save}
             disabled={pending || !form.title.trim()}
           >
-            Save
+            {isNew ? "Create task" : "Save"}
           </Button>
         </div>
       </div>
