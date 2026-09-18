@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays } from "date-fns";
+import { addDaysISO, startOfDayInTZ, timeInTZ, todayISO } from "./dates";
 import { db } from "@/db";
 import { googleAccount, type Task } from "@/db/schema";
 
@@ -118,7 +119,7 @@ function eventBody(task: Task) {
     summary: task.title,
     description: task.notes || undefined,
     start: { date: due },
-    end: { date: format(addDays(new Date(due + "T00:00:00"), 1), "yyyy-MM-dd") },
+    end: { date: addDaysISO(due, 1) },
     transparency: "transparent",
     extendedProperties: { private: { taskId: String(task.id) } },
   };
@@ -152,12 +153,22 @@ export async function deleteTaskEvent(eventId: string) {
 
 // ---- reading the user's own calendars for the Today view ----
 
-export type CalendarEvent = { id: string; title: string; start: string; end: string; allDay: boolean; calendar: string; link?: string };
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  /** "All day" or "HH:mm–HH:mm" in the app timezone (computed server-side). */
+  timeLabel: string;
+  calendar: string;
+  link?: string;
+};
 
 export async function listEventsForDays(days = 1): Promise<CalendarEvent[]> {
   const acct = await getAccount();
   if (!acct) return [];
-  const from = startOfDay(new Date());
+  const from = startOfDayInTZ(todayISO());
   const to = addDays(from, days);
   const list = await gcal<{ items: { id: string; summary: string; accessRole: string; selected?: boolean }[] }>("/users/me/calendarList");
   const cals = list.items.filter((c) => c.id !== acct.calendarId && c.selected !== false);
@@ -169,15 +180,21 @@ export async function listEventsForDays(days = 1): Promise<CalendarEvent[]> {
         });
         return (r.items ?? [])
           .filter((e) => e.status !== "cancelled")
-          .map<CalendarEvent>((e) => ({
-            id: e.id,
-            title: e.summary ?? "(untitled)",
-            start: e.start.dateTime ?? e.start.date ?? "",
-            end: e.end.dateTime ?? e.end.date ?? "",
-            allDay: !e.start.dateTime,
-            calendar: c.summary,
-            link: e.htmlLink,
-          }));
+          .map<CalendarEvent>((e) => {
+            const allDay = !e.start.dateTime;
+            const start = e.start.dateTime ?? e.start.date ?? "";
+            const end = e.end.dateTime ?? e.end.date ?? "";
+            return {
+              id: e.id,
+              title: e.summary ?? "(untitled)",
+              start,
+              end,
+              allDay,
+              timeLabel: allDay ? "All day" : `${timeInTZ(new Date(start))}–${timeInTZ(new Date(end))}`,
+              calendar: c.summary,
+              link: e.htmlLink,
+            };
+          });
       } catch {
         return [];
       }

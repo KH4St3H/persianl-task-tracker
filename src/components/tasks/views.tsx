@@ -17,11 +17,10 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { reorderTasks, setQuadrant } from "@/actions/tasks";
-import { isDueToday, isOverdue } from "@/lib/dates";
+import { dateInTZ, isDueToday, isOverdue } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { TaskWithRelations } from "@/db/schema";
 import type { CalendarEvent } from "@/lib/google";
-import { format, parseISO } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { TaskItem } from "./task-item";
 
@@ -69,7 +68,7 @@ function CalendarSection({ events }: { events: CalendarEvent[] }) {
         >
           <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
           <span className="w-24 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-            {e.allDay ? "All day" : `${format(parseISO(e.start), "HH:mm")}–${format(parseISO(e.end), "HH:mm")}`}
+            {e.timeLabel}
           </span>
           <span className="min-w-0 flex-1 truncate">{e.title}</span>
           <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{e.calendar}</span>
@@ -84,7 +83,7 @@ export function TodayView({ tasks, onOpen, events = null }: ViewProps & { events
   const overdue = open.filter((t) => isOverdue(t.dueDate)).sort(byDue);
   const today = open.filter((t) => isDueToday(t.dueDate)).sort((a, b) => a.level - b.level);
   const urgent = open.filter((t) => t.urgent && !isOverdue(t.dueDate) && !isDueToday(t.dueDate)).sort((a, b) => a.level - b.level);
-  const done = tasks.filter((t) => t.status === "done" && t.completedAt && isDueToday(t.completedAt.toISOString().slice(0, 10)));
+  const done = tasks.filter((t) => t.status === "done" && t.completedAt && isDueToday(dateInTZ(t.completedAt)));
   const empty = !overdue.length && !today.length && !urgent.length;
   return (
     <div className="space-y-5">

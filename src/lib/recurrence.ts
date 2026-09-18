@@ -1,10 +1,11 @@
 import { addDays, addMonths, addWeeks, format, parseISO } from "date-fns";
 import type { RepeatRule } from "@/db/schema";
+import { todayISO } from "./dates";
 
 /** Next due date (yyyy-MM-dd) after `from`, given a rule. Returns null if not recurring. */
 export function nextDueDate(from: string | null, rule: RepeatRule, interval: number): string | null {
   if (rule === "none") return null;
-  const base = from ? parseISO(from) : new Date();
+  const base = parseISO(from ?? todayISO());
   const n = Math.max(1, interval || 1);
   let next: Date;
   switch (rule) {
