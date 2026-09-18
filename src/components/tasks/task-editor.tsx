@@ -225,9 +225,7 @@ function EditorForm({
       )}
 
       <Separator />
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Priority
-      </div>
+      <div className="font-display text-base font-medium">Priority</div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">

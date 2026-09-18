@@ -27,7 +27,6 @@ import { dateInTZ, isDueToday, isOverdue } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { TaskWithRelations } from "@/db/schema";
 import type { CalendarEvent } from "@/lib/google";
-import { CalendarDays } from "lucide-react";
 import { TaskItem } from "./task-item";
 
 type ViewProps = {
@@ -36,11 +35,7 @@ type ViewProps = {
 };
 
 function Empty({ text }: { text: string }) {
-  return (
-    <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-      {text}
-    </p>
-  );
+  return <p className="py-6 text-[15px] text-muted-foreground">{text}</p>;
 }
 
 function DoneSection({ tasks, onOpen }: ViewProps) {
@@ -51,12 +46,12 @@ function DoneSection({ tasks, onOpen }: ViewProps) {
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        className="text-xs text-muted-foreground hover:text-foreground"
+        className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
-        {show ? "Hide" : "Show"} {tasks.length} completed
+        {show ? "Hide" : "Show"} {tasks.length} done
       </button>
       {show && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 divide-y divide-border">
           {tasks.map((t) => (
             <TaskItem key={t.id} task={t} onOpen={onOpen} compact />
           ))}
@@ -72,31 +67,33 @@ const byDue = (a: TaskWithRelations, b: TaskWithRelations) =>
 // ---------- Today ----------
 function CalendarSection({ events }: { events: CalendarEvent[] }) {
   return (
-    <section className="space-y-1.5">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        On your calendar · {events.length}
-      </h2>
+    <section>
+      <h2 className="font-display text-lg font-medium">On your calendar</h2>
       {!events.length && (
-        <p className="text-sm text-muted-foreground">No events today.</p>
+        <p className="py-2 text-[15px] text-muted-foreground">
+          No events today.
+        </p>
       )}
-      {events.map((e) => (
-        <a
-          key={e.id}
-          href={e.link}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-3 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm hover:bg-muted/60"
-        >
-          <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-          <span className="w-24 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-            {e.timeLabel}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{e.title}</span>
-          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
-            {e.calendar}
-          </span>
-        </a>
-      ))}
+      <ul className="divide-y divide-border">
+        {events.map((e) => (
+          <li key={e.id}>
+            <a
+              href={e.link}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-baseline gap-3 py-2 text-[15px] hover:text-foreground"
+            >
+              <span className="w-24 shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                {e.timeLabel}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{e.title}</span>
+              <span className="hidden shrink-0 text-[13px] text-muted-foreground sm:inline">
+                {e.calendar}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -125,7 +122,7 @@ export function TodayView({
     <div className="space-y-5">
       {events && <CalendarSection events={events} />}
       {empty && (
-        <Empty text="Nothing due today. Add a due date or mark something urgent to see it here." />
+        <Empty text="Nothing is due today. Pick something from the List, or give a task a due date." />
       )}
       {overdue.length > 0 && (
         <Section
@@ -133,13 +130,19 @@ export function TodayView({
           tasks={overdue}
           onOpen={onOpen}
           tone="danger"
+          highlightFirst
         />
       )}
       {today.length > 0 && (
-        <Section title="Due today" tasks={today} onOpen={onOpen} />
+        <Section
+          title="Due today"
+          tasks={today}
+          onOpen={onOpen}
+          highlightFirst={!overdue.length}
+        />
       )}
       {urgent.length > 0 && (
-        <Section title="Urgent" tasks={urgent} onOpen={onOpen} />
+        <Section title="Marked urgent" tasks={urgent} onOpen={onOpen} />
       )}
       <DoneSection tasks={done} onOpen={onOpen} />
     </div>
@@ -151,20 +154,28 @@ function Section({
   tasks,
   onOpen,
   tone,
-}: ViewProps & { title: string; tone?: "danger" }) {
+  highlightFirst = false,
+}: ViewProps & { title: string; tone?: "danger"; highlightFirst?: boolean }) {
   return (
-    <section className="space-y-1.5">
+    <section>
       <h2
         className={cn(
-          "text-xs font-medium uppercase tracking-wide text-muted-foreground",
-          tone === "danger" && "text-red-600 dark:text-red-400",
+          "font-display text-lg font-medium",
+          tone === "danger" && "text-overdue",
         )}
       >
-        {title} · {tasks.length}
+        {title} <span className="text-muted-foreground">({tasks.length})</span>
       </h2>
-      {tasks.map((t) => (
-        <TaskItem key={t.id} task={t} onOpen={onOpen} />
-      ))}
+      <div className="divide-y divide-border">
+        {tasks.map((t, i) => (
+          <TaskItem
+            key={t.id}
+            task={t}
+            onOpen={onOpen}
+            highlight={highlightFirst && i === 0}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -187,10 +198,10 @@ export function ListView({ tasks, onOpen }: ViewProps) {
             key={g.level}
             title={
               g.level === 1
-                ? "P1 · Highest"
+                ? "P1, do these first"
                 : g.level === 2
-                  ? "P2 · Normal"
-                  : "P3 · Low"
+                  ? "P2"
+                  : "P3, when there is time"
             }
             tasks={g.items}
             onOpen={onOpen}
@@ -210,11 +221,8 @@ export function ScoreView({ tasks, onOpen }: ViewProps) {
   const done = tasks.filter((t) => t.status === "done");
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">
-        Ranked by impact ÷ effort. Edit a task to set both on a 1–5 scale.
-      </p>
       {!open.length && <Empty text="No open tasks." />}
-      <div className="space-y-1.5">
+      <div className="divide-y divide-border">
         {open.map(({ t, score }) => (
           <TaskItem
             key={t.id}
@@ -222,11 +230,11 @@ export function ScoreView({ tasks, onOpen }: ViewProps) {
             onOpen={onOpen}
             trailing={
               <div className="shrink-0 text-right">
-                <div className="font-mono text-sm font-semibold tabular-nums">
+                <div className="font-display text-base font-semibold tabular-nums">
                   {score.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {t.impact}i / {t.effort}e
+                <div className="text-[11px] text-muted-foreground">
+                  {t.impact} impact, {t.effort} effort
                 </div>
               </div>
             }
@@ -317,9 +325,6 @@ export function RankedView({ tasks, onOpen }: ViewProps) {
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">
-        Drag the handle to put tasks in the order you want to do them.
-      </p>
       {!open.length && <Empty text="No open tasks." />}
       <DndContext
         sensors={sensors}
@@ -327,7 +332,7 @@ export function RankedView({ tasks, onOpen }: ViewProps) {
         onDragEnd={onDragEnd}
       >
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
-          <div className="space-y-1.5">
+          <div className="divide-y divide-border">
             {order.map((id) => {
               const t = byId.get(id);
               return t ? (
@@ -349,8 +354,8 @@ const QUADRANTS = [
     urgent: true,
     important: true,
     title: "Do first",
-    hint: "Urgent & important",
-    tone: "border-red-500/40 bg-red-500/5",
+    hint: "Urgent and important",
+    tone: "bg-marker/40 dark:bg-marker/20",
   },
   {
     key: "schedule",
@@ -358,23 +363,23 @@ const QUADRANTS = [
     important: true,
     title: "Schedule",
     hint: "Important, not urgent",
-    tone: "border-blue-500/40 bg-blue-500/5",
+    tone: "",
   },
   {
     key: "delegate",
     urgent: true,
     important: false,
-    title: "Delegate / quick",
+    title: "Get it off the desk",
     hint: "Urgent, not important",
-    tone: "border-amber-500/40 bg-amber-500/5",
+    tone: "",
   },
   {
     key: "drop",
     urgent: false,
     important: false,
-    title: "Later / drop",
+    title: "Later, or never",
     hint: "Neither",
-    tone: "border-muted bg-muted/30",
+    tone: "",
   },
 ] as const;
 
@@ -433,21 +438,23 @@ function Quadrant({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-40 flex-col gap-1.5 rounded-xl border p-3 transition-colors",
+        "flex min-h-44 flex-col p-3 transition-colors",
         q.tone,
-        isOver && "ring-2 ring-ring",
+        isOver && "bg-muted",
       )}
     >
       <div className="mb-1">
-        <div className="text-sm font-semibold">{q.title}</div>
-        <div className="text-xs text-muted-foreground">{q.hint}</div>
+        <div className="font-display text-lg font-medium leading-tight">
+          {q.title}
+        </div>
+        <div className="text-[13px] text-muted-foreground">{q.hint}</div>
       </div>
       {tasks.map((t) => (
         <DraggableCard key={t.id} task={t} onOpen={onOpen} />
       ))}
       {!tasks.length && (
-        <div className="flex-1 rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
-          Drop here
+        <div className="flex-1 py-3 text-[13px] text-muted-foreground">
+          Drop a task here
         </div>
       )}
     </div>
@@ -482,7 +489,7 @@ export function MatrixView({ tasks, onOpen }: ViewProps) {
   return (
     <div className="space-y-5">
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 border border-foreground/60 sm:grid-cols-2 [&>*:nth-child(odd)]:sm:border-r [&>*:nth-child(-n+2)]:sm:border-b [&>*]:border-foreground/60 [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:sm:border-b-0 [&>*:nth-child(-n+2)]:sm:border-b">
           {QUADRANTS.map((q) => (
             <Quadrant
               key={q.key}

@@ -2,7 +2,6 @@
 
 import { useRef, useTransition } from "react";
 import { quickAddTask } from "@/actions/tasks";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, SlidersHorizontal } from "lucide-react";
 
@@ -23,19 +22,23 @@ export function QuickAdd({
   }
 
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <Input
+    <form
+      onSubmit={submit}
+      className="flex items-center gap-2 border-b border-foreground/70 pb-1"
+    >
+      <Plus className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <input
         ref={ref}
-        placeholder="Add a task and press Enter…"
-        aria-label="New task title"
+        placeholder="Add a task"
+        aria-label="New task"
         disabled={pending}
+        className="h-9 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground disabled:opacity-50"
       />
       <Button
         type="button"
-        variant="outline"
-        size="icon"
+        variant="ghost"
+        size="sm"
         aria-label="Add with details"
-        title="Add with details"
         disabled={pending}
         onClick={() => {
           const title = ref.current?.value ?? "";
@@ -43,15 +46,7 @@ export function QuickAdd({
           onDetails(title);
         }}
       >
-        <SlidersHorizontal />
-      </Button>
-      <Button
-        type="submit"
-        size="icon"
-        aria-label="Add task"
-        disabled={pending}
-      >
-        <Plus />
+        <SlidersHorizontal /> Details
       </Button>
     </form>
   );
